@@ -148,6 +148,13 @@ func (r *Repository) filtered(ctx context.Context, query ListQuery) *gorm.DB {
 			Where("pipe_segment_id = ?", query.SegmentID)
 		tx = tx.Where("task_id IN (?)", subQuery)
 	}
+	if query.District != "" {
+		subQuery := r.db.WithContext(ctx).Table(refx.TableCleaningTasks+" AS t").
+			Select("t.id").
+			Joins("INNER JOIN "+refx.TablePipeSegments+" AS s ON s.id = t.pipe_segment_id").
+			Where("s.district = ?", query.District)
+		tx = tx.Where("task_id IN (?)", subQuery)
+	}
 	if query.Result != "" {
 		tx = tx.Where("result = ?", query.Result)
 	}
@@ -164,6 +171,36 @@ func (r *Repository) filtered(ctx context.Context, query ListQuery) *gorm.DB {
 		tx = tx.Where("result = ? AND rectified_at IS NULL", ResultRework)
 	}
 	return tx
+}
+
+// Count 按与 List 完全相同的条件统计验收记录数量，保证看板指标与下钻列表条数一致。
+func (r *Repository) Count(ctx context.Context, query ListQuery) (int64, error) {
+	var total int64
+	if err := r.filtered(ctx, query).Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// CountGrouped 按指定列分组计数，复用 List 的筛选条件（分页字段被忽略）。
+func (r *Repository) CountGrouped(ctx context.Context, query ListQuery, column string) (map[string]int64, error) {
+	type row struct {
+		Key   string
+		Total int64
+	}
+	rows := make([]row, 0)
+	err := r.filtered(ctx, query).
+		Select(column + " AS key, COUNT(*) AS total").
+		Group(column).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int64, len(rows))
+	for _, item := range rows {
+		result[item.Key] = item.Total
+	}
+	return result, nil
 }
 
 // CountByResult 按验收结论统计数量。

@@ -128,6 +128,33 @@ func (s *Service) List(ctx context.Context, query ListQuery) ([]PipeSegment, int
 	return items, total, nil
 }
 
+// CountForDashboard 按给定条件统计管段数量（供看板使用，与 List 同口径）。
+func (s *Service) CountForDashboard(ctx context.Context, query ListQuery) (int64, error) {
+	total, err := s.repo.Count(ctx, query)
+	if err != nil {
+		return 0, httpx.WrapInternal("统计管段数量失败", err)
+	}
+	return total, nil
+}
+
+// SumLengthForDashboard 按给定条件汇总管段长度（供看板使用，与 List 同口径）。
+func (s *Service) SumLengthForDashboard(ctx context.Context, query ListQuery) (float64, error) {
+	total, err := s.repo.SumLength(ctx, query)
+	if err != nil {
+		return 0, httpx.WrapInternal("统计管段长度失败", err)
+	}
+	return total, nil
+}
+
+// CountGroupedForDashboard 按列分组统计管段数量（供看板使用，与 List 同口径）。
+func (s *Service) CountGroupedForDashboard(ctx context.Context, query ListQuery, column string) (map[string]int64, error) {
+	result, err := s.repo.CountGrouped(ctx, query, column)
+	if err != nil {
+		return nil, httpx.WrapInternal("统计管段分组数量失败", err)
+	}
+	return result, nil
+}
+
 // Detail 查询管段详情，附带任务统计与最近任务。
 func (s *Service) Detail(ctx context.Context, id uint) (*DetailResponse, error) {
 	segment, err := s.FindByID(ctx, id)

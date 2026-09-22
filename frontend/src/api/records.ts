@@ -5,6 +5,7 @@ export interface RecordQuery {
   keyword?: string;
   taskId?: number;
   segmentId?: number;
+  district?: string;
   method?: string;
   weather?: string;
   dateFrom?: string;

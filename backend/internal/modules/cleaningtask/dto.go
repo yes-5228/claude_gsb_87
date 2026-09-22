@@ -41,7 +41,9 @@ type ListQuery struct {
 	PipeSegmentID uint
 	PlanFrom      *date.Date
 	PlanTo        *date.Date
-	Page          httpx.PageQuery
+	// Overdue 仅看超期任务（计划完成日期已过且仍为待开工/清淤中），供看板下钻。
+	Overdue bool
+	Page    httpx.PageQuery
 }
 
 // ParseListQuery 解析任务列表查询条件。
@@ -53,6 +55,7 @@ func ParseListQuery(c *fiber.Ctx) (ListQuery, error) {
 		Priority:      httpx.TrimmedQuery(c, "priority"),
 		Source:        httpx.TrimmedQuery(c, "source"),
 		PipeSegmentID: uint(c.QueryInt("pipeSegmentId", 0)),
+		Overdue:       c.QueryBool("overdue", false),
 		Page:          httpx.ParsePage(c),
 	}
 	from, err := parseDateParam(c, "planFrom", "计划开始日期起")

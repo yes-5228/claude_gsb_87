@@ -5,28 +5,53 @@ import { toErrorMessage } from '../../api/client';
 import { segmentApi } from '../../api/pipesegments';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DataTable, type Column } from '../../components/DataTable';
+import { DrillBanner, type FilterChip } from '../../components/DrillBanner';
 import { PageHeader } from '../../components/PageHeader';
 import { Pagination } from '../../components/Pagination';
 import { SectionCard } from '../../components/SectionCard';
 import { StatusTag } from '../../components/StatusTag';
 import { useToast } from '../../components/Toast';
 import { useAsync } from '../../hooks/useAsync';
+import { useDrillContext, stripDrillParams } from '../../hooks/useDrillContext';
 import { useMeta } from '../../providers/MetaProvider';
 import type { PipeSegment } from '../../types/domain';
 import { formatDate, formatLength, formatNumber } from '../../utils/format';
 
 const PAGE_SIZE = 10;
 
+function buildDrillChips(
+  district: string,
+  status: string,
+  uncleaned: boolean,
+  enums: ReturnType<typeof useMeta>['enums']
+): FilterChip[] {
+  const chips: FilterChip[] = [];
+  if (district) {
+    chips.push({ label: '所属片区', value: district });
+  }
+  if (uncleaned) {
+    chips.push({ label: '清淤状态', value: '未清淤（最近清淤日期为空）' });
+  }
+  if (status) {
+    const label = enums?.segmentStatuses.find((item) => item.value === status)?.label ?? status;
+    chips.push({ label: '运行状态', value: label });
+  }
+  chips.push({ label: '时间范围', value: '不适用（台账快照口径）' });
+  return chips;
+}
+
 export function SegmentListPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { enums } = useMeta();
   const [params, setParams] = useSearchParams();
+  const drill = useDrillContext();
 
   const keyword = params.get('keyword') ?? '';
   const district = params.get('district') ?? '';
   const pipeType = params.get('pipeType') ?? '';
   const status = params.get('status') ?? '';
+  const uncleaned = params.get('uncleaned') === 'true';
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1);
 
   const [keywordInput, setKeywordInput] = useState(keyword);
@@ -35,8 +60,17 @@ export function SegmentListPage() {
   }, [keyword]);
 
   const list = useAsync(
-    () => segmentApi.list({ keyword, district, pipeType, status, page, pageSize: PAGE_SIZE }),
-    [keyword, district, pipeType, status, page]
+    () =>
+      segmentApi.list({
+        keyword,
+        district,
+        pipeType,
+        status,
+        uncleaned: uncleaned || undefined,
+        page,
+        pageSize: PAGE_SIZE
+      }),
+    [keyword, district, pipeType, status, uncleaned, page]
   );
   const options = useAsync(() => segmentApi.options(), []);
 
@@ -44,7 +78,7 @@ export function SegmentListPage() {
   const [deleting, setDeleting] = useState(false);
 
   const applyFilter = (patch: Record<string, string>) => {
-    const next = new URLSearchParams(params);
+    const next = stripDrillParams(new URLSearchParams(params));
     Object.entries(patch).forEach(([key, value]) => {
       if (value) {
         next.set(key, value);
@@ -179,6 +213,9 @@ export function SegmentListPage() {
 
       <SectionCard title="管段清单" subtitle={`共 ${list.data?.total ?? 0} 条记录`}>
         <div className="card-body-flush">
+          {drill.fromDashboard ? (
+            <DrillBanner metric={drill.metric} chips={buildDrillChips(district, status, uncleaned, enums)} backHref={drill.backHref} />
+          ) : null}
           <div className="filter-bar">
             <div className="filter-item" style={{ minWidth: 220 }}>
               <span className="filter-label">关键字</span>

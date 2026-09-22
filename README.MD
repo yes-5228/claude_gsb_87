@@ -9,7 +9,7 @@
 
 | 模块 | 页面 | 说明 |
 | --- | --- | --- |
-| 运行看板 | `/` | 跨模块汇总管段、任务、清淤量、验收合格率，含待验收任务与分片区统计 |
+| 运行看板 | `/` | 跨模块汇总管段、任务、清淤量、验收合格率，支持片区 + 时间范围全局筛选；全部指标卡、状态分布、片区统计均可下钻到明细列表（自动带入状态 / 片区 / 时间条件） |
 | 管段台账 | `/segments`、`/segments/new`、`/segments/:id`、`/segments/:id/edit` | 管段档案维护、任务概况、清淤履历（计划 → 记录 → 验收） |
 | 清淤任务 | `/tasks`、`/tasks/new`、`/tasks/:id`、`/tasks/:id/edit` | 任务登记、开工 / 完工报验 / 取消、任务下清淤记录与验收结论 |
 | 清淤记录 | `/records`、`/records/new`、`/records/:id`、`/records/:id/edit` | 按次录入现场数据（长度、清淤量、用水量、人数、设备、安全措施等） |
@@ -132,29 +132,48 @@ npm run dev            # http://localhost:5173
 | --- | --- | --- |
 | GET | `/healthz` | 健康检查（环境、数据库、运行时长） |
 | GET | `/api/v1/meta/enums` | 全部枚举字典 |
-| GET | `/api/v1/dashboard/overview` | 看板总览指标 |
-| GET | `/api/v1/dashboard/district-stats` | 分片区统计 |
-| GET | `/api/v1/dashboard/pending-acceptance?limit=8` | 待验收任务 |
-| GET | `/api/v1/dashboard/recent-records?limit=8` | 最近清淤记录 |
-| GET | `/api/v1/pipe-segments` | 管段列表（`keyword` `district` `pipeType` `status` `page` `pageSize`） |
+| GET | `/api/v1/dashboard/overview?district=&dateFrom=&dateTo=` | 看板总览指标（支持片区 + 时间范围全局筛选） |
+| GET | `/api/v1/dashboard/district-stats?district=&dateFrom=&dateTo=` | 分片区统计（管段为台账快照，任务 / 清淤量随时间范围变化） |
+| GET | `/api/v1/dashboard/pending-acceptance?limit=8&district=&dateFrom=&dateTo=` | 待验收任务 |
+| GET | `/api/v1/dashboard/recent-records?limit=8&district=&dateFrom=&dateTo=` | 最近清淤记录 |
+| GET | `/api/v1/pipe-segments` | 管段列表（`keyword` `district` `pipeType` `status` `uncleaned` `cleanedFrom` `cleanedTo` `page` `pageSize`） |
 | GET | `/api/v1/pipe-segments/options` | 管段下拉选项 + 已有片区 |
 | GET | `/api/v1/pipe-segments/:id` | 管段详情（含任务统计与最近任务） |
 | GET | `/api/v1/pipe-segments/:id/cleaning-history` | 管段清淤履历 |
 | POST/PUT/DELETE | `/api/v1/pipe-segments[/:id]` | 新增 / 修改 / 删除管段 |
-| GET | `/api/v1/cleaning-tasks` | 任务列表（`keyword` `status` `district` `priority` `source` `pipeSegmentId` `planFrom` `planTo`） |
+| GET | `/api/v1/cleaning-tasks` | 任务列表（`keyword` `status` `district` `priority` `source` `pipeSegmentId` `planFrom` `planTo` `overdue`） |
 | GET | `/api/v1/cleaning-tasks/:id` | 任务详情（含清淤汇总、验收结论、可执行动作） |
 | POST/PUT/DELETE | `/api/v1/cleaning-tasks[/:id]` | 登记 / 修改 / 删除任务 |
 | POST | `/api/v1/cleaning-tasks/:id/start` | 开工（待开工 → 清淤中） |
 | POST | `/api/v1/cleaning-tasks/:id/complete` | 完工报验（清淤中 → 待验收，需至少 1 条清淤记录） |
 | POST | `/api/v1/cleaning-tasks/:id/cancel` | 取消任务（需填写取消原因） |
-| GET | `/api/v1/cleaning-records` | 记录列表（`keyword` `taskId` `segmentId` `method` `weather` `dateFrom` `dateTo`） |
+| GET | `/api/v1/cleaning-records` | 记录列表（`keyword` `taskId` `segmentId` `district` `method` `weather` `dateFrom` `dateTo`） |
 | GET | `/api/v1/cleaning-records/:id` | 记录详情（含所属任务与管段） |
 | POST/PUT/DELETE | `/api/v1/cleaning-records[/:id]` | 录入 / 修改 / 删除清淤记录 |
-| GET | `/api/v1/acceptances` | 验收列表（`keyword` `taskId` `segmentId` `result` `inspectorName` `dateFrom` `dateTo` `pendingRectify`） |
+| GET | `/api/v1/acceptances` | 验收列表（`keyword` `taskId` `segmentId` `district` `result` `inspectorName` `dateFrom` `dateTo` `pendingRectify`） |
 | GET | `/api/v1/acceptances/:id` | 验收详情（含任务与清淤汇总） |
 | POST | `/api/v1/acceptances` | 登记验收结论 |
 | POST | `/api/v1/acceptances/:id/rectify` | 登记整改完成 |
 | DELETE | `/api/v1/acceptances/:id` | 删除验收记录（合格结论不允许删除） |
+
+## 看板下钻与口径一致性
+
+看板顶部的**片区 + 时间范围**全局筛选保存在 URL 查询串中，作用于所有指标：
+
+- 时间范围在各业务域使用不同落库字段，与对应列表接口完全一致：
+  清淤任务按**计划开始日期**（`planFrom/planTo`）、清淤记录按**清淤日期**（`dateFrom/dateTo`）、
+  验收记录按**验收日期**（`dateFrom/dateTo`）；管段台账是当前快照，只受片区影响。
+- 每个指标卡、任务 / 管段状态分布的数字、分片区统计表中的数字都可点击下钻，
+  下钻链接自动携带对应的状态条件（如待验收 `status=completed`、超期 `overdue=true`、
+  合格 `result=pass`、未清淤 `uncleaned=true`）与片区 / 时间条件。
+- 明细页顶部以条件标签（chip）说明当前指标与已带入的筛选条件；点「返回看板」会通过
+  `back` 参数还原看板原来的时间范围。在明细页手动改动筛选条件后，下钻标记自动消失。
+- **口径一致性保证**：看板统计与明细列表复用后端各模块 `Repository.filtered` 的同一套查询谓词
+  （看板经模块 Service 的 `CountForDashboard / CountGroupedForDashboard / SumForDashboard` 调用），
+  因此指标口径调整后下钻结果必然同步，看板数字始终等于明细列表的 `total`，不会出现对不上。
+- **基数去重**：同一管段在多条任务 / 多条清淤记录下只计一次管段基数
+  （片区统计的管段数直接按管段表分组计数，不 JOIN 任务 / 记录行）；明细列表使用独立的
+  COUNT 查询取总数，分页翻页时总数保持稳定。
 
 ## 数据模型与状态流转
 

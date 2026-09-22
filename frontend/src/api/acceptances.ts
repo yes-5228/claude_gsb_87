@@ -13,6 +13,7 @@ export interface AcceptanceQuery {
   segmentId?: number;
   result?: string;
   inspectorName?: string;
+  district?: string;
   dateFrom?: string;
   dateTo?: string;
   pendingRectify?: boolean;

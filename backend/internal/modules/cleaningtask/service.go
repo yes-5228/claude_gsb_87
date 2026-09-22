@@ -156,6 +156,24 @@ func (s *Service) List(ctx context.Context, query ListQuery) ([]ListItem, int64,
 	return items, total, nil
 }
 
+// CountForDashboard 按给定条件统计任务数量（供看板使用，与 List 同口径）。
+func (s *Service) CountForDashboard(ctx context.Context, query ListQuery) (int64, error) {
+	total, err := s.repo.Count(ctx, query)
+	if err != nil {
+		return 0, httpx.WrapInternal("统计任务数量失败", err)
+	}
+	return total, nil
+}
+
+// CountGroupedForDashboard 按列分组统计任务数量（供看板使用，与 List 同口径）。
+func (s *Service) CountGroupedForDashboard(ctx context.Context, query ListQuery, column string) (map[string]int64, error) {
+	result, err := s.repo.CountGrouped(ctx, query, column)
+	if err != nil {
+		return nil, httpx.WrapInternal("统计任务分组数量失败", err)
+	}
+	return result, nil
+}
+
 // Detail 任务详情。
 func (s *Service) Detail(ctx context.Context, id uint) (*DetailResponse, error) {
 	task, err := s.FindByID(ctx, id)

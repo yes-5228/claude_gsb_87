@@ -116,7 +116,57 @@ func (r *Repository) filtered(ctx context.Context, query ListQuery) *gorm.DB {
 	if query.Status != "" {
 		tx = tx.Where("status = ?", query.Status)
 	}
+	if query.Uncleaned {
+		tx = tx.Where("last_cleaned_at IS NULL")
+	}
+	if query.CleanedFrom != nil {
+		tx = tx.Where("last_cleaned_at >= ?", query.CleanedFrom.Time)
+	}
+	if query.CleanedTo != nil {
+		tx = tx.Where("last_cleaned_at <= ?", query.CleanedTo.Time)
+	}
 	return tx
+}
+
+// Count 按与 List 完全相同的条件统计管段数量，保证看板指标与下钻列表条数一致。
+func (r *Repository) Count(ctx context.Context, query ListQuery) (int64, error) {
+	var total int64
+	if err := r.filtered(ctx, query).Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// SumLength 按与 List 相同的条件汇总管段长度。
+func (r *Repository) SumLength(ctx context.Context, query ListQuery) (float64, error) {
+	var total float64
+	if err := r.filtered(ctx, query).
+		Select("COALESCE(SUM(length_m), 0)").
+		Scan(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// CountGrouped 按指定列分组计数，复用 List 的筛选条件（分页字段被忽略）。
+func (r *Repository) CountGrouped(ctx context.Context, query ListQuery, column string) (map[string]int64, error) {
+	type row struct {
+		Key   string
+		Total int64
+	}
+	rows := make([]row, 0)
+	err := r.filtered(ctx, query).
+		Select(column + " AS key, COUNT(*) AS total").
+		Group(column).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int64, len(rows))
+	for _, item := range rows {
+		result[item.Key] = item.Total
+	}
+	return result, nil
 }
 
 // Search 按关键字搜索管段，用于下拉选择。

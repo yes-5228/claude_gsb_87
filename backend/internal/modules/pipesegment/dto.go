@@ -1,9 +1,12 @@
 package pipesegment
 
 import (
+	"fmt"
+
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/drainage/desilting/internal/httpx"
+	"github.com/drainage/desilting/internal/shared/date"
 	"github.com/drainage/desilting/internal/shared/refx"
 )
 
@@ -28,22 +31,50 @@ type SaveRequest struct {
 
 // ListQuery 管段列表查询条件。
 type ListQuery struct {
-	Keyword  string
-	District string
-	PipeType string
-	Status   string
-	Page     httpx.PageQuery
+	Keyword   string
+	District  string
+	PipeType  string
+	Status    string
+	Uncleaned bool // 仅看尚未清淤（last_cleaned_at IS NULL），供看板下钻
+	// CleanedFrom / CleanedTo 按最近清淤日期筛选，供看板时间范围下钻。
+	CleanedFrom *date.Date
+	CleanedTo   *date.Date
+	Page        httpx.PageQuery
 }
 
 // ParseListQuery 从请求 query 中解析列表查询条件。
-func ParseListQuery(c *fiber.Ctx) ListQuery {
-	return ListQuery{
-		Keyword:  httpx.TrimmedQuery(c, "keyword"),
-		District: httpx.TrimmedQuery(c, "district"),
-		PipeType: httpx.TrimmedQuery(c, "pipeType"),
-		Status:   httpx.TrimmedQuery(c, "status"),
-		Page:     httpx.ParsePage(c),
+func ParseListQuery(c *fiber.Ctx) (ListQuery, error) {
+	query := ListQuery{
+		Keyword:   httpx.TrimmedQuery(c, "keyword"),
+		District:  httpx.TrimmedQuery(c, "district"),
+		PipeType:  httpx.TrimmedQuery(c, "pipeType"),
+		Status:    httpx.TrimmedQuery(c, "status"),
+		Uncleaned: c.QueryBool("uncleaned", false),
+		Page:      httpx.ParsePage(c),
 	}
+	from, err := parseDateParam(c, "cleanedFrom", "最近清淤日期起")
+	if err != nil {
+		return ListQuery{}, err
+	}
+	to, err := parseDateParam(c, "cleanedTo", "最近清淤日期止")
+	if err != nil {
+		return ListQuery{}, err
+	}
+	query.CleanedFrom = from
+	query.CleanedTo = to
+	return query, nil
+}
+
+func parseDateParam(c *fiber.Ctx, key, label string) (*date.Date, error) {
+	raw := httpx.TrimmedQuery(c, key)
+	if raw == "" {
+		return nil, nil
+	}
+	parsed, err := date.Parse(raw)
+	if err != nil {
+		return nil, httpx.BadRequest(fmt.Sprintf("%s格式不正确，应为 YYYY-MM-DD", label))
+	}
+	return &parsed, nil
 }
 
 // DetailResponse 管段详情：基础档案 + 任务统计 + 最近任务。

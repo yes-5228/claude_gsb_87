@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/drainage/desilting/internal/shared/date"
 	"github.com/drainage/desilting/internal/shared/refx"
 )
 
@@ -163,7 +164,42 @@ func (r *Repository) filtered(ctx context.Context, query ListQuery) *gorm.DB {
 	if query.PlanTo != nil {
 		tx = tx.Where("plan_start_date <= ?", query.PlanTo.Time)
 	}
+	if query.Overdue {
+		// 超期：计划完成日期早于今天，且仍停留在待开工 / 清淤中。
+		tx = tx.Where("plan_end_date < ?", date.Today().Time).
+			Where("status IN ?", []string{StatusPending, StatusInProgress})
+	}
 	return tx
+}
+
+// Count 按与 List 完全相同的条件统计任务数量，保证看板指标与下钻列表条数一致。
+func (r *Repository) Count(ctx context.Context, query ListQuery) (int64, error) {
+	var total int64
+	if err := r.filtered(ctx, query).Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// CountGrouped 按指定列分组计数，复用 List 的筛选条件（分页字段被忽略）。
+func (r *Repository) CountGrouped(ctx context.Context, query ListQuery, column string) (map[string]int64, error) {
+	type row struct {
+		Key   string
+		Total int64
+	}
+	rows := make([]row, 0)
+	err := r.filtered(ctx, query).
+		Select(column + " AS key, COUNT(*) AS total").
+		Group(column).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int64, len(rows))
+	for _, item := range rows {
+		result[item.Key] = item.Total
+	}
+	return result, nil
 }
 
 // HasRecords 任务下是否已经有清淤记录。

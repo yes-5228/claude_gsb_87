@@ -18,7 +18,10 @@ func NewHandler(svc *Service) *Handler {
 
 // List 管段列表。
 func (h *Handler) List(c *fiber.Ctx) error {
-	query := ParseListQuery(c)
+	query, err := ParseListQuery(c)
+	if err != nil {
+		return err
+	}
 	items, total, err := h.svc.List(c.UserContext(), query)
 	if err != nil {
 		return err

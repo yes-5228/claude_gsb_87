@@ -40,6 +40,6 @@ func Setup(app *fiber.App, db *gorm.DB, cfg *config.Config) {
 	segmentService := pipesegment.Register(api, db)
 	taskService := cleaningtask.Register(api, db, segmentService)
 	recordService := cleaningrecord.Register(api, db, taskService)
-	acceptance.Register(api, db, taskService, segmentService, recordService)
-	dashboard.Register(api, db)
+	acceptanceService := acceptance.Register(api, db, taskService, segmentService, recordService)
+	dashboard.Register(api, db, segmentService, taskService, recordService, acceptanceService)
 }

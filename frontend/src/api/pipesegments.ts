@@ -13,6 +13,9 @@ export interface SegmentQuery {
   district?: string;
   pipeType?: string;
   status?: string;
+  uncleaned?: boolean;
+  cleanedFrom?: string;
+  cleanedTo?: string;
   page?: number;
   pageSize?: number;
 }

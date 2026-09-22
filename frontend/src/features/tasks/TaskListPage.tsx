@@ -2,32 +2,69 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toErrorMessage } from '../../api/client';
+import { segmentApi } from '../../api/pipesegments';
 import { taskApi } from '../../api/tasks';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DataTable, type Column } from '../../components/DataTable';
+import { DrillBanner, type FilterChip } from '../../components/DrillBanner';
 import { PageHeader } from '../../components/PageHeader';
 import { Pagination } from '../../components/Pagination';
 import { SectionCard } from '../../components/SectionCard';
 import { StatusTag } from '../../components/StatusTag';
 import { useToast } from '../../components/Toast';
 import { useAsync } from '../../hooks/useAsync';
+import { useDrillContext, stripDrillParams } from '../../hooks/useDrillContext';
 import { useMeta } from '../../providers/MetaProvider';
 import type { TaskListItem } from '../../types/domain';
 import { formatDate, formatNumber, formatVolume } from '../../utils/format';
 
 const PAGE_SIZE = 10;
 
+function buildTaskDrillChips(
+  district: string,
+  status: string,
+  overdue: boolean,
+  planFrom: string,
+  planTo: string,
+  enums: ReturnType<typeof useMeta>['enums']
+): FilterChip[] {
+  const chips: FilterChip[] = [];
+  if (district) {
+    chips.push({ label: '所属片区', value: district });
+  }
+  if (overdue) {
+    chips.push({ label: '超期状态', value: '仅看超期（计划完成日期已过，仍待开工/清淤中）' });
+  }
+  if (status) {
+    const label = enums?.taskStatuses.find((item) => item.value === status)?.label ?? status;
+    chips.push({ label: '任务状态', value: label });
+  }
+  if (planFrom || planTo) {
+    chips.push({
+      label: '计划开始日期',
+      value: `${planFrom || '不限'} ~ ${planTo || '不限'}`
+    });
+  } else {
+    chips.push({ label: '时间范围', value: '全部时间' });
+  }
+  return chips;
+}
+
 export function TaskListPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { enums } = useMeta();
   const [params, setParams] = useSearchParams();
+  const drill = useDrillContext();
 
   const keyword = params.get('keyword') ?? '';
   const status = params.get('status') ?? '';
   const district = params.get('district') ?? '';
   const priority = params.get('priority') ?? '';
   const source = params.get('source') ?? '';
+  const planFrom = params.get('planFrom') ?? '';
+  const planTo = params.get('planTo') ?? '';
+  const overdue = params.get('overdue') === 'true';
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1);
 
   const [keywordInput, setKeywordInput] = useState(keyword);
@@ -36,15 +73,28 @@ export function TaskListPage() {
   }, [keyword]);
 
   const list = useAsync(
-    () => taskApi.list({ keyword, status, district, priority, source, page, pageSize: PAGE_SIZE }),
-    [keyword, status, district, priority, source, page]
+    () =>
+      taskApi.list({
+        keyword,
+        status,
+        district,
+        priority,
+        source,
+        planFrom,
+        planTo,
+        overdue: overdue || undefined,
+        page,
+        pageSize: PAGE_SIZE
+      }),
+    [keyword, status, district, priority, source, planFrom, planTo, overdue, page]
   );
 
   const [pendingDelete, setPendingDelete] = useState<TaskListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const options = useAsync(() => segmentApi.options(), []);
 
   const applyFilter = (patch: Record<string, string>) => {
-    const next = new URLSearchParams(params);
+    const next = stripDrillParams(new URLSearchParams(params));
     Object.entries(patch).forEach(([key, value]) => {
       if (value) {
         next.set(key, value);
@@ -177,6 +227,13 @@ export function TaskListPage() {
 
       <SectionCard title="任务清单" subtitle={`共 ${list.data?.total ?? 0} 条记录`}>
         <div className="card-body-flush">
+          {drill.fromDashboard ? (
+            <DrillBanner
+              metric={drill.metric}
+              chips={buildTaskDrillChips(district, status, overdue, planFrom, planTo, enums)}
+              backHref={drill.backHref}
+            />
+          ) : null}
           <div className="filter-bar">
             <div className="filter-item" style={{ minWidth: 220 }}>
               <span className="filter-label">关键字</span>
@@ -231,11 +288,31 @@ export function TaskListPage() {
             </div>
             <div className="filter-item">
               <span className="filter-label">所属片区</span>
+              <select className="select" value={district} onChange={(event) => applyFilter({ district: event.target.value })}>
+                <option value="">全部片区</option>
+                {(options.data?.districts ?? []).map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="filter-item">
+              <span className="filter-label">计划开始起</span>
               <input
                 className="input"
-                placeholder="精确匹配片区"
-                value={district}
-                onChange={(event) => applyFilter({ district: event.target.value })}
+                type="date"
+                value={planFrom}
+                onChange={(event) => applyFilter({ planFrom: event.target.value })}
+              />
+            </div>
+            <div className="filter-item">
+              <span className="filter-label">计划开始止</span>
+              <input
+                className="input"
+                type="date"
+                value={planTo}
+                onChange={(event) => applyFilter({ planTo: event.target.value })}
               />
             </div>
             <div className="filter-actions">

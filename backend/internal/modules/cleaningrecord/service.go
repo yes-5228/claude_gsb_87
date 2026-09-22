@@ -171,6 +171,24 @@ func (s *Service) List(ctx context.Context, query ListQuery) ([]ListItem, int64,
 	return items, total, nil
 }
 
+// CountForDashboard 按给定条件统计清淤记录数量（供看板使用，与 List 同口径）。
+func (s *Service) CountForDashboard(ctx context.Context, query ListQuery) (int64, error) {
+	total, err := s.repo.Count(ctx, query)
+	if err != nil {
+		return 0, httpx.WrapInternal("统计清淤记录数量失败", err)
+	}
+	return total, nil
+}
+
+// SumForDashboard 按给定条件汇总清淤量与清淤长度（供看板使用，与 List 同口径）。
+func (s *Service) SumForDashboard(ctx context.Context, query ListQuery) (RecordSum, error) {
+	sum, err := s.repo.Sum(ctx, query)
+	if err != nil {
+		return RecordSum{}, httpx.WrapInternal("统计清淤量失败", err)
+	}
+	return sum, nil
+}
+
 // Detail 记录详情。
 func (s *Service) Detail(ctx context.Context, id uint) (*DetailResponse, error) {
 	record, err := s.FindByID(ctx, id)

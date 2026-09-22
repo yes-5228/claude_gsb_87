@@ -10,6 +10,7 @@ export interface TaskQuery {
   pipeSegmentId?: number;
   planFrom?: string;
   planTo?: string;
+  overdue?: boolean;
   page?: number;
   pageSize?: number;
 }

@@ -40,6 +40,7 @@ type ListQuery struct {
 	SegmentID      uint
 	Result         string
 	InspectorName  string
+	District       string // 按所属管段的片区筛选，供看板下钻
 	DateFrom       *date.Date
 	DateTo         *date.Date
 	PendingRectify bool
@@ -54,6 +55,7 @@ func ParseListQuery(c *fiber.Ctx) (ListQuery, error) {
 		SegmentID:      uint(c.QueryInt("segmentId", 0)),
 		Result:         httpx.TrimmedQuery(c, "result"),
 		InspectorName:  httpx.TrimmedQuery(c, "inspectorName"),
+		District:       httpx.TrimmedQuery(c, "district"),
 		PendingRectify: c.QueryBool("pendingRectify", false),
 		Page:           httpx.ParsePage(c),
 	}

@@ -114,6 +114,13 @@ func (r *Repository) filtered(ctx context.Context, query ListQuery) *gorm.DB {
 			Where("pipe_segment_id = ?", query.SegmentID)
 		tx = tx.Where("task_id IN (?)", subQuery)
 	}
+	if query.District != "" {
+		subQuery := r.db.WithContext(ctx).Table(refx.TableCleaningTasks+" AS t").
+			Select("t.id").
+			Joins("INNER JOIN "+refx.TablePipeSegments+" AS s ON s.id = t.pipe_segment_id").
+			Where("s.district = ?", query.District)
+		tx = tx.Where("task_id IN (?)", subQuery)
+	}
 	if query.Method != "" {
 		tx = tx.Where("method = ?", query.Method)
 	}
@@ -127,6 +134,30 @@ func (r *Repository) filtered(ctx context.Context, query ListQuery) *gorm.DB {
 		tx = tx.Where("cleaned_at <= ?", query.DateTo.Time)
 	}
 	return tx
+}
+
+// RecordSum 清淤记录的汇总值。
+type RecordSum struct {
+	SludgeVolumeM3 float64
+	CleanedLengthM float64
+}
+
+// Count 按与 List 完全相同的条件统计记录数量，保证看板指标与下钻列表条数一致。
+func (r *Repository) Count(ctx context.Context, query ListQuery) (int64, error) {
+	var total int64
+	if err := r.filtered(ctx, query).Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// Sum 按与 List 相同的条件汇总清淤量与清淤长度。
+func (r *Repository) Sum(ctx context.Context, query ListQuery) (RecordSum, error) {
+	var sum RecordSum
+	err := r.filtered(ctx, query).
+		Select("COALESCE(SUM(sludge_volume_m3), 0) AS sludge_volume_m3, COALESCE(SUM(length_m), 0) AS cleaned_length_m").
+		Scan(&sum).Error
+	return sum, err
 }
 
 // HasAcceptance 记录是否已被验收引用。

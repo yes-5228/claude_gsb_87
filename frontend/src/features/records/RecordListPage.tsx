@@ -2,29 +2,47 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toErrorMessage } from '../../api/client';
+import { segmentApi } from '../../api/pipesegments';
 import { recordApi } from '../../api/records';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DataTable, type Column } from '../../components/DataTable';
+import { DrillBanner, type FilterChip } from '../../components/DrillBanner';
 import { PageHeader } from '../../components/PageHeader';
 import { Pagination } from '../../components/Pagination';
 import { SectionCard } from '../../components/SectionCard';
 import { StatusTag } from '../../components/StatusTag';
 import { useToast } from '../../components/Toast';
 import { useAsync } from '../../hooks/useAsync';
+import { useDrillContext, stripDrillParams } from '../../hooks/useDrillContext';
 import { useMeta } from '../../providers/MetaProvider';
 import type { RecordListItem } from '../../types/domain';
 import { formatDate, formatLength, formatNumber, formatVolume } from '../../utils/format';
 
 const PAGE_SIZE = 10;
 
+function buildRecordDrillChips(
+  district: string,
+  dateFrom: string,
+  dateTo: string
+): FilterChip[] {
+  const chips: FilterChip[] = [];
+  if (district) {
+    chips.push({ label: '所属片区', value: district });
+  }
+  chips.push({ label: '清淤日期', value: `${dateFrom || '不限'} ~ ${dateTo || '不限'}` });
+  return chips;
+}
+
 export function RecordListPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { enums } = useMeta();
   const [params, setParams] = useSearchParams();
+  const drill = useDrillContext();
 
   const keyword = params.get('keyword') ?? '';
   const taskId = Number(params.get('taskId') ?? '0') || 0;
+  const district = params.get('district') ?? '';
   const method = params.get('method') ?? '';
   const weather = params.get('weather') ?? '';
   const dateFrom = params.get('dateFrom') ?? '';
@@ -41,6 +59,7 @@ export function RecordListPage() {
       recordApi.list({
         keyword,
         taskId: taskId || undefined,
+        district,
         method,
         weather,
         dateFrom,
@@ -48,14 +67,15 @@ export function RecordListPage() {
         page,
         pageSize: PAGE_SIZE
       }),
-    [keyword, taskId, method, weather, dateFrom, dateTo, page]
+    [keyword, taskId, district, method, weather, dateFrom, dateTo, page]
   );
 
   const [pendingDelete, setPendingDelete] = useState<RecordListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const options = useAsync(() => segmentApi.options(), []);
 
   const applyFilter = (patch: Record<string, string>) => {
-    const next = new URLSearchParams(params);
+    const next = stripDrillParams(new URLSearchParams(params));
     Object.entries(patch).forEach(([key, value]) => {
       if (value) {
         next.set(key, value);
@@ -196,6 +216,13 @@ export function RecordListPage() {
         }
       >
         <div className="card-body-flush">
+          {drill.fromDashboard ? (
+            <DrillBanner
+              metric={drill.metric}
+              chips={buildRecordDrillChips(district, dateFrom, dateTo)}
+              backHref={drill.backHref}
+            />
+          ) : null}
           <div className="filter-bar">
             <div className="filter-item" style={{ minWidth: 220 }}>
               <span className="filter-label">关键字</span>
@@ -218,6 +245,17 @@ export function RecordListPage() {
                 {(enums?.cleaningMethods ?? []).map((item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="filter-item">
+              <span className="filter-label">所属片区</span>
+              <select className="select" value={district} onChange={(event) => applyFilter({ district: event.target.value })}>
+                <option value="">全部片区</option>
+                {(options.data?.districts ?? []).map((item) => (
+                  <option key={item} value={item}>
+                    {item}
                   </option>
                 ))}
               </select>

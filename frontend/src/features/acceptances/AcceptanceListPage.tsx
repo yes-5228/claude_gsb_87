@@ -2,26 +2,54 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { acceptanceApi } from '../../api/acceptances';
+import { segmentApi } from '../../api/pipesegments';
 import { DataTable, type Column } from '../../components/DataTable';
+import { DrillBanner, type FilterChip } from '../../components/DrillBanner';
 import { PageHeader } from '../../components/PageHeader';
 import { Pagination } from '../../components/Pagination';
 import { SectionCard } from '../../components/SectionCard';
 import { StatusTag } from '../../components/StatusTag';
 import { useAsync } from '../../hooks/useAsync';
+import { useDrillContext, stripDrillParams } from '../../hooks/useDrillContext';
 import { useMeta } from '../../providers/MetaProvider';
 import type { AcceptanceListItem } from '../../types/domain';
 import { formatDate, formatNumber } from '../../utils/format';
 
 const PAGE_SIZE = 10;
 
+function buildAcceptanceDrillChips(
+  district: string,
+  result: string,
+  pendingRectify: boolean,
+  dateFrom: string,
+  dateTo: string,
+  enums: ReturnType<typeof useMeta>['enums']
+): FilterChip[] {
+  const chips: FilterChip[] = [];
+  if (district) {
+    chips.push({ label: '所属片区', value: district });
+  }
+  if (pendingRectify) {
+    chips.push({ label: '整改状态', value: '待整改（需整改且未登记整改完成）' });
+  }
+  if (result) {
+    const label = enums?.acceptanceResults.find((item) => item.value === result)?.label ?? result;
+    chips.push({ label: '验收结论', value: label });
+  }
+  chips.push({ label: '验收日期', value: `${dateFrom || '不限'} ~ ${dateTo || '不限'}` });
+  return chips;
+}
+
 export function AcceptanceListPage() {
   const navigate = useNavigate();
   const { enums } = useMeta();
   const [params, setParams] = useSearchParams();
+  const drill = useDrillContext();
 
   const keyword = params.get('keyword') ?? '';
   const result = params.get('result') ?? '';
   const inspectorName = params.get('inspectorName') ?? '';
+  const district = params.get('district') ?? '';
   const dateFrom = params.get('dateFrom') ?? '';
   const dateTo = params.get('dateTo') ?? '';
   const pendingRectify = params.get('pendingRectify') === 'true';
@@ -38,17 +66,19 @@ export function AcceptanceListPage() {
         keyword,
         result,
         inspectorName,
+        district,
         dateFrom,
         dateTo,
         pendingRectify: pendingRectify ? true : undefined,
         page,
         pageSize: PAGE_SIZE
       }),
-    [keyword, result, inspectorName, dateFrom, dateTo, pendingRectify, page]
+    [keyword, result, inspectorName, district, dateFrom, dateTo, pendingRectify, page]
   );
+  const options = useAsync(() => segmentApi.options(), []);
 
   const applyFilter = (patch: Record<string, string>) => {
-    const next = new URLSearchParams(params);
+    const next = stripDrillParams(new URLSearchParams(params));
     Object.entries(patch).forEach(([key, value]) => {
       if (value) {
         next.set(key, value);
@@ -177,6 +207,13 @@ export function AcceptanceListPage() {
 
       <SectionCard title="验收清单" subtitle={`共 ${list.data?.total ?? 0} 条记录`}>
         <div className="card-body-flush">
+          {drill.fromDashboard ? (
+            <DrillBanner
+              metric={drill.metric}
+              chips={buildAcceptanceDrillChips(district, result, pendingRectify, dateFrom, dateTo, enums)}
+              backHref={drill.backHref}
+            />
+          ) : null}
           <div className="filter-bar">
             <div className="filter-item" style={{ minWidth: 220 }}>
               <span className="filter-label">关键字</span>
@@ -210,6 +247,17 @@ export function AcceptanceListPage() {
                 value={inspectorName}
                 onChange={(event) => applyFilter({ inspectorName: event.target.value })}
               />
+            </div>
+            <div className="filter-item">
+              <span className="filter-label">所属片区</span>
+              <select className="select" value={district} onChange={(event) => applyFilter({ district: event.target.value })}>
+                <option value="">全部片区</option>
+                {(options.data?.districts ?? []).map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="filter-item">
               <span className="filter-label">验收日期起</span>

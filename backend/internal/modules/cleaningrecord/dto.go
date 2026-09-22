@@ -35,6 +35,7 @@ type ListQuery struct {
 	SegmentID uint
 	Method    string
 	Weather   string
+	District  string // 按所属管段的片区筛选，供看板下钻
 	DateFrom  *date.Date
 	DateTo    *date.Date
 	Page      httpx.PageQuery
@@ -48,6 +49,7 @@ func ParseListQuery(c *fiber.Ctx) (ListQuery, error) {
 		SegmentID: uint(c.QueryInt("segmentId", 0)),
 		Method:    httpx.TrimmedQuery(c, "method"),
 		Weather:   httpx.TrimmedQuery(c, "weather"),
+		District:  httpx.TrimmedQuery(c, "district"),
 		Page:      httpx.ParsePage(c),
 	}
 	from, err := parseDateParam(c, "dateFrom", "清淤日期起")
